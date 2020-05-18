@@ -7,7 +7,19 @@ class CPU:
 
     def __init__(self):
         """Construct a new CPU."""
-        pass
+        # step 1
+        self.ram = [0] * 256
+        self.reg = [0] * 8
+        self.pc = 0
+    
+    def ram_read(self, mem_address):
+        # takes an address (mem_address) in ram and returns the value (mem_value) stored there
+        mem_value = self.ram[mem_address]
+        return mem_value
+
+    def ram_write(self, mem_value, mem_address):
+        # stores mem_value at given mem_address in ram
+        self.ram[mem_address] = mem_value
 
     def load(self):
         """Load a program into memory."""
@@ -62,4 +74,14 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        pass
+        running = True
+
+        while running:
+            # read memory address stored in pc and store result in opcode
+            opcode = self.ram_read(self.pc)
+
+            # LDI command
+            if opcode == LDI:
+                # Read values at PC+1 into operand_a and PC+2 into operand_b
+                operand_a = self.ram_read(self.pc + 1)
+                operand_b = self.ram_read(self.pc + 2)
