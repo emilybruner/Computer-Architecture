@@ -2,10 +2,17 @@
 
 import sys
 
+# binary values listed in spec
+
 LDI = 0b10000010
 PRN = 0b01000111
 HLT = 0b00000001
 MUL = 0b10100010
+PUSH = 0b01000101
+POP = 0b01000110
+CALL = 0b01010000
+RET = 0b00010001
+ADD = 0b10100000
 
 class CPU:
     """Main CPU class."""
@@ -13,20 +20,75 @@ class CPU:
     def __init__(self):
         """Construct a new CPU."""
         # step 1
-        self.ram = [0] * 256
-        self.reg = [0] * 8
-        self.pc = 0
+        self.branchtable = {}
+        self.branchtable[LDI] = self.ldi_handler
+        self.branchtable[PRN] = self.prn_handler
+        self.branchtable[HLT] = self.hlt_handler
+        self.branchtable[MUL] = self.mul_handler
+        self.branchtable[PUSH] = self.push_handler
+        self.branchtable[POP] = self.pop_handler
+        self.branchtable[CALL] = self.call_handler
+        self.branchtable[RET] = self.ret_handler
+        self.branchtable[ADD] = self.add_handler
+        self.running = False
+        self.pc = 0  # starts program counter/ instruction pointer
+        self.register = [0] * 8  # sets registers R0-R7
+        self.ram = [0] * 256  # available memory
+        self.pointer = 7  # stack pointer
+        # pointing to R7 and setting it F4 per spec
+        self.register[self.pointer] = 0xF4
     
-    def ram_read(self, mem_address):
+    def ram_read(self, mar):
         # takes an address (mem_address) in ram and returns the value (mem_value) stored there
-        mem_value = self.ram[mem_address]
-        return mem_value
+        return self.ram[mar]
 
-    def ram_write(self, mem_value, mem_address):
+    def ram_write(self, mar, mdr):
         # stores mem_value at given mem_address in ram
-        self.ram[mem_address] = mem_value
+        self.ram[mar] = mdr
 
-    def load(self):
+    def ldi_handler(self, *argv):
+        self.register[argv[0]] = argv[1]
+        self.pc += 3
+
+    def prn_handler(self, *argv):
+        print(self.register[argv[0]])
+        self.pc += 2
+
+    def mul_handler(self, *argv):
+        self.alu(MUL, argv[0], argv[1])
+        self.pc += 3
+
+    def push_handler(self, *argv):
+        self.register[self.pointer] -= 1
+        self.ram[self.register[self.pointer]] = self.register[argv[0]]
+        self.pc += 2
+
+    def pop_handler(self, *argv):
+        stack = self.ram[self.register[self.pointer]]
+        self.register[argv[0]] = stack
+        self.register[self.pointer] += 1
+        self.pc += 2
+
+    def call_handler(self, *argv):
+        self.register[self.pointer] -= 1
+        self.ram[self.register[self.pointer]] = self.pc + 2
+
+        updated_register = self.ram[self.pc + 1]
+        self.pc = self.register[updated_register]
+
+    def ret_handler(self, *argv):
+        self.pc = self.ram[self.register[self.pointer]]
+        self.register[self.pointer] += 1
+
+    def add_handler(self, *argv):
+        self.alu("ADD", argv[0], argv[1])
+        self.pc += 3
+
+    def hlt_handler(self, *argv):
+        self.running = False
+        self.pc += 3
+
+    def load(self, filename):
         """Load a program into memory."""
         # counter
         address = 0
@@ -66,10 +128,10 @@ class CPU:
         """ALU operations."""
 
         if op == "ADD":
-            self.reg[reg_a] += self.reg[reg_b]
-        #elif op == "SUB": etc
-        elif op == "MUL":
-            self.reg[reg_a] *= self.reg[reg_b]
+            self.register[reg_a] += self.register[reg_b]
+        # elif op == "SUB": etc
+        elif op == MUL:
+            self.register[reg_a] *= self.register[reg_b]
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -89,40 +151,52 @@ class CPU:
         ), end='')
 
         for i in range(8):
-            print(" %02X" % self.reg[i], end='')
+            print(" %02X" % self.register[i], end='')
 
         print()
 
     def run(self):
         """Run the CPU."""
-        running = True
-
-        while running:
-            # read memory address stored in pc and store result in opcode
-            ir = self.ram_read(self.pc)
-            # Read values at PC+1 into operand_a and PC+2 into operand_b
+        self.running = True
+        while self.running:
+            instruction = self.ram[self.pc]
             operand_a = self.ram_read(self.pc + 1)
             operand_b = self.ram_read(self.pc + 2)
 
-            # LDI command
-            if ir == LDI:
-                self.reg[operand_a] = operand_b
-                self.pc +=3  
-                
-            elif ir == PRN:
-                # read value at PC+1 into operand_a
-                prn_reg = self.ram[self.pc + 1]
-                print(self.reg[prn_reg])
-                self.pc += 2
-
-            elif ir == MUL:
-                self.alu(ir, operand_a, operand_b)
-                self.pc += 3
-
-            elif ir == HLT:
-                running = False
-            
+            if instruction in self.branchtable:
+                self.branchtable[instruction](operand_a, operand_b)
             else:
-                print('Unknown Command')
-                running = False
+                print('Instruction Not Found')
+                sys.exit()
+
+        # running = True
+
+        # while running:
+        #     # read memory address stored in pc and store result in opcode
+        #     ir = self.ram_read(self.pc)
+        #     # Read values at PC+1 into operand_a and PC+2 into operand_b
+        #     operand_a = self.ram_read(self.pc + 1)
+        #     operand_b = self.ram_read(self.pc + 2)
+
+        #     # LDI command
+        #     if ir == LDI:
+        #         self.register[operand_a] = operand_b
+        #         self.pc +=3  
+                
+        #     elif ir == PRN:
+        #         # read value at PC+1 into operand_a
+        #         prn_reg = self.ram[self.pc + 1]
+        #         print(self.register[prn_reg])
+        #         self.pc += 2
+
+        #     elif ir == MUL:
+        #         self.alu(ir, operand_a, operand_b)
+        #         self.pc += 3
+
+        #     elif ir == HLT:
+        #         running = False
+            
+        #     else:
+        #         print('Unknown Command')
+        #         running = False
 
